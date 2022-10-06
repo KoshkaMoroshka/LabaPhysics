@@ -1,17 +1,21 @@
+using System;
 using UnityEngine;
+using Random = UnityEngine.Random;
 
 
 public class Kinematics : MonoBehaviour
 {
     private SingleDegreeJoint[] _joints;
     public float[] solution;
+    public float[] currentSolution;
+    public float[] beststate;
+    public float prevdist = float.MaxValue;
 
     [SerializeField] private GameObject actor;
     [SerializeField] private GameObject target;
     [SerializeField] private float maxDegreeAngle = 90;
 
     private float _bestDistanceToTarget;
-    [SerializeField] private float _minDistanceToObject = 0.5f;
 
     private float _currentDistanceToTarget;
     private float _previousDistanceToTarget;
@@ -21,68 +25,66 @@ public class Kinematics : MonoBehaviour
     {
         _joints = GetComponentsInChildren<SingleDegreeJoint>();
         solution = new float[_joints.Length];
-        _bestDistanceToTarget = DistanceActorToTarget(actor.transform.position, target.transform.position);
+        currentSolution = new float[_joints.Length];
+        beststate = new float[_joints.Length];
         for (var i = 0; i < _joints.Length; i++)
         {
-            solution[i] = _joints[i].GetValue();
+            beststate[i] = _joints[i].GetValue();
         }
-
-        _currentDistanceToTarget = DistanceActorToTarget(actor.transform.position, target.transform.position);
     }
 
-    private float DistanceActorToTarget(Vector3 positionActor, Vector3 positionTarget)
+    private float DistanceActorToTarget()
     {
-        return Vector3.Distance(positionActor, positionTarget);
+        return Vector3.Distance(actor.transform.position, target.transform.position);
     }
 
-    private void InverseKinematic()
-    {
-        float[] lastSolutions = new float[solution.Length];
-        for (var i = 0; i < lastSolutions.Length; i++)
-        {
-            lastSolutions[i] = solution[i];
-        }
-
-        Solve();
-        ForwardKinematics();
-        var distance = DistanceActorToTarget(actor.transform.position, target.transform.position);
-        if (distance < _bestDistanceToTarget)
-            _bestDistanceToTarget = distance;
-        else
-        {
-            solution = lastSolutions;
-            ForwardKinematics();
-        }
-    }
-
-    // Update is called once per frame
     private void Update()
     {
-        _previousDistanceToTarget = _currentDistanceToTarget;
-        _currentDistanceToTarget = DistanceActorToTarget(actor.transform.position, target.transform.position);
-        //ForwardKinematics();
-        if (_currentDistanceToTarget < _minDistanceToObject)
+        if (DistanceActorToTarget() < 0.3f)
+        {
+            rotationSpeed = 1;
             return;
+        }
 
-        if (_previousDistanceToTarget == _currentDistanceToTarget)
-            speedInc();
-        else
+        Randoms(beststate);
+        var newdist = InverseKinematics(beststate);
+        if (newdist < prevdist)
+        {
+            for (var i = 0; i < beststate.Length; i++)
+                solution[i] = beststate[i];
+            prevdist = newdist;
             speedDec();
+        }
+        else
+        {
+            for (var i = 0; i < beststate.Length; i++)
+                beststate[i] = solution[i];
+            speedInc();
+        }
 
+        ForwardKinematics();
+        prevdist = InverseKinematics(currentSolution);
+    }
 
-        _bestDistanceToTarget = DistanceActorToTarget(actor.transform.position, target.transform.position);
-        InverseKinematic();
+    private float InverseKinematics(float[] solutions)
+    {
+        for (var i = 0; i < solutions.Length; i++)
+        {
+            _joints[i].SetValue(solutions[i]);
+        }
+        return DistanceActorToTarget();
     }
 
     private void ForwardKinematics()
     {
         for (var i = 0; i < solution.Length; i++)
         {
-            _joints[i].SetValue(solution[i]);
+            _joints[i].SetValue(currentSolution[i] = currentSolution[i] * 0.9f + solution[i] * 0.1f);
         }
     }
 
-    private float _maxRotationSpeed = 180;
+
+    private float _maxRotationSpeed = 20;
     private float _rotationAcceleration = 0.001f;
     public float rotationSpeed = 1;
 
@@ -96,11 +98,11 @@ public class Kinematics : MonoBehaviour
         rotationSpeed *= 1 - _rotationAcceleration;
     }
 
-    private void Solve()
+    private void Randoms(float[] solutions)
     {
-        for (var i = 0; i < solution.Length; i++)
+        for (var i = 0; i < solutions.Length; i++)
         {
-            solution[i] = InRange(solution[i] + (Random.value * 2 - 1) * rotationSpeed);
+            solutions[i] = InRange(solutions[i] + (Random.value * 2 - 1) * rotationSpeed);
         }
     }
 

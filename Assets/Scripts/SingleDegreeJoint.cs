@@ -34,7 +34,7 @@ public class SingleDegreeJoint : MonoBehaviour
             _ => transform1.localEulerAngles
         };
     }
-
+    
     public float GetValue()
     {
         return transform.localEulerAngles[(int) degreeOfFreedom];
